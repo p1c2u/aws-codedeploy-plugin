@@ -100,6 +100,7 @@ public class AWSCodeDeployPublisher extends Publisher implements SimpleBuildStep
     private final String credentials;
     private final String deploymentMethod;
     private final String versionFileName;
+    private final String packageName;
 
     private PrintStream logger;
     private Map <String, String> envVars;
@@ -127,7 +128,8 @@ public class AWSCodeDeployPublisher extends Publisher implements SimpleBuildStep
             String proxyHost,
             int proxyPort,
             String excludes,
-            String subdirectory) {
+            String subdirectory,
+            String packageName) {
 
         this.externalId = externalId;
         this.applicationName = applicationName;
@@ -150,6 +152,7 @@ public class AWSCodeDeployPublisher extends Publisher implements SimpleBuildStep
         this.awsSecretKey = awsSecretKey;
         this.iamRoleArn = iamRoleArn;
         this.deploymentGroupAppspec = deploymentGroupAppspec;
+        this.packageName = packageName;
 
         if (waitForCompletion != null && waitForCompletion) {
             this.waitForCompletion = waitForCompletion;
@@ -217,12 +220,12 @@ public class AWSCodeDeployPublisher extends Publisher implements SimpleBuildStep
 
             verifyCodeDeployApplication(aws);
 
-            final String projectName = build.getDisplayName();
+            final String zipName = getPackageName(build);
             if (workspace == null) {
                 throw new IllegalArgumentException("No workspace present for the build.");
             }
             final FilePath sourceDirectory = getSourceDirectory(workspace);
-            final RevisionLocation revisionLocation = zipAndUpload(aws, projectName, sourceDirectory);
+            final RevisionLocation revisionLocation = zipAndUpload(aws, zipName, sourceDirectory);
 
             registerRevision(aws, revisionLocation);
             if ("onlyRevision".equals(deploymentMethod)){
@@ -259,6 +262,14 @@ public class AWSCodeDeployPublisher extends Publisher implements SimpleBuildStep
         return sourcePath;
     }
 
+    private String getPackageName(AbstractBuild build) {
+        if (packageName != null && packageName.length() != 0) {
+            return packageName;
+        } else {
+            return build.getProject().getName();;
+        }
+    }
+
     private boolean isSubDirectory(FilePath parent, FilePath child) {
         FilePath parentFolder = child;
         while (parentFolder!=null) {
@@ -291,7 +302,7 @@ public class AWSCodeDeployPublisher extends Publisher implements SimpleBuildStep
         }
     }
 
-    private RevisionLocation zipAndUpload(AWSClients aws, String projectName, FilePath sourceDirectory) throws IOException, InterruptedException, IllegalArgumentException {
+    private RevisionLocation zipAndUpload(AWSClients aws, String zipName, FilePath sourceDirectory) throws IOException, InterruptedException, IllegalArgumentException {
 
         File zipFile = null;
         File versionFile;
@@ -312,13 +323,13 @@ public class AWSCodeDeployPublisher extends Publisher implements SimpleBuildStep
         }
 
         if (version != null){
-          zipFile = new File("/tmp/" + projectName + "-" + version + ".zip");
+          zipFile = new File("/tmp/" + zipFilename + "-" + version + ".zip");
           final boolean fileCreated = zipFile.createNewFile();
           if (!fileCreated) {
             logger.println("File already exists, overwriting: " + zipFile.getPath());
           }
         } else {
-          zipFile = File.createTempFile(projectName + "-", ".zip");
+          zipFile = File.createTempFile(zipName + "-", ".zip");
         }
 
         String key;
